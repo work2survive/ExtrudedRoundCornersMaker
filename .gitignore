@@ -1,0 +1,7 @@
+# Ignore build_zxp as requested
+build_zxp/
+
+# OS generated files
+Thumbs.db
+.DS_Store
+*.tmp
