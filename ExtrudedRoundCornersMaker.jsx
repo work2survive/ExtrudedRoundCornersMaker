@@ -291,7 +291,7 @@
             ].join('\n');
         },
 
-        cornerSegmentRotZ: function (corner, k) {
+        cornerSegmentRotY: function (corner, k) {
             var startAngle = this.cornerStartAngle(corner);
             return [
                 'var ctrl = thisComp.layer("Master Controller");',
@@ -815,9 +815,9 @@
             }
 
             createStraightWall("Wall Top", EXPRESSIONS.topWallSize, EXPRESSIONS.topWallPos, 90, 0, 0);
-            createStraightWall("Wall Bottom", EXPRESSIONS.bottomWallSize, EXPRESSIONS.bottomWallPos, 90, 0, 180);
-            createStraightWall("Wall Left", EXPRESSIONS.leftWallSize, EXPRESSIONS.leftWallPos, 90, 0, -90);
-            createStraightWall("Wall Right", EXPRESSIONS.rightWallSize, EXPRESSIONS.rightWallPos, 90, 0, 90);
+            createStraightWall("Wall Bottom", EXPRESSIONS.bottomWallSize, EXPRESSIONS.bottomWallPos, 90, 180, 0);
+            createStraightWall("Wall Left", EXPRESSIONS.leftWallSize, EXPRESSIONS.leftWallPos, 90, -90, 0);
+            createStraightWall("Wall Right", EXPRESSIONS.rightWallSize, EXPRESSIONS.rightWallPos, 90, 90, 0);
 
             // 5. Create Corner Arc Segments (Discretized into 2D strips)
             var segLimit = params.dynamicSegments ? 24 : params.segments;
@@ -835,8 +835,8 @@
                     var tr = segLayer.property("ADBE Transform Group");
                     tr.property("ADBE Position").expression = EXPRESSIONS.cornerSegmentPos(cName, k);
                     tr.property("ADBE Rotate X").setValue(90);
-                    tr.property("ADBE Rotate Y").setValue(0);
-                    tr.property("ADBE Rotate Z").expression = EXPRESSIONS.cornerSegmentRotZ(cName, k);
+                    tr.property("ADBE Rotate Y").expression = EXPRESSIONS.cornerSegmentRotY(cName, k);
+                    tr.property("ADBE Rotate Z").setValue(0);
                     tr.property("ADBE Opacity").expression = EXPRESSIONS.cornerSegmentOpacity(k);
 
                     var contents = segLayer.property("ADBE Root Vectors Group");
