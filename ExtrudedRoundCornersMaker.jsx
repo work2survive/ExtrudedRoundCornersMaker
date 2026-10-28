@@ -378,19 +378,92 @@
             return '0';
         },
 
-        // Screen Position Expression
-        screenPos: function (isBack) {
-            var prefix = isBack ? "Back" : "Front";
+        // Screen Position in 3D scene (Placed snug on Cap without 3D track-matte conflicts)
+        screen3DPos: function (isBack) {
             return [
                 'var ctrl = thisComp.layer("Master Controller");',
-                'var W = ctrl.effect("Width")("Slider").value;',
-                'var H = ctrl.effect("Height")("Slider").value;',
+                'var off = ctrl.effect("Cap Z-Offset (px)")("Slider").value;',
                 'var d = ctrl.effect("Extrusion Depth")("Slider").value;',
-                'var align = Math.round(ctrl.effect("' + prefix + ' Screen Alignment")("Slider").value);',
-                'var off = ctrl.effect("' + prefix + ' Screen Offset")("Point").value;',
-                'var capOff = ctrl.effect("Cap Z-Offset (px)")("Slider").value;',
+                (isBack
+                    ? '[0, 0, d + (d >= 0 ? off + 0.15 : -off - 0.15)];'
+                    : '[0, 0, (d >= 0 ? -off - 0.15 : off + 0.15)];')
+            ].join('\n');
+        },
+
+        // Cross-Comp Cap Path (for 2D Matte inside Screen Wrapper - works in Classic 3D & Advanced 3D)
+        capPathCrossComp: function (targetCompName) {
+            return [
+                'var ctrl = null;',
+                'try { ctrl = comp("' + targetCompName + '").layer("Master Controller"); } catch(e) {}',
+                'if (!ctrl) {',
+                '  var cList = ["' + targetCompName + '", "Extruded_Round_Corners_1", "Extruded_Round_Corners_2", "Comp 1"];',
+                '  for (var i = 0; i < cList.length; i++) {',
+                '    try { ctrl = comp(cList[i]).layer("Master Controller"); if (ctrl) break; } catch(err) {}',
+                '  }',
+                '}',
+                'if (!ctrl) ctrl = thisLayer;',
                 '',
-                '// 0: Center, 1: TL, 2: TC, 3: TR, 4: CL, 5: CR, 6: BL, 7: BC, 8: BR',
+                'var W = 600, H = 400, rAll = 80, link = true, rTL = 80, rTR = 80, rBR = 80, rBL = 80;',
+                'try {',
+                '  W = Math.max(1, ctrl.effect("Width")("Slider").value);',
+                '  H = Math.max(1, ctrl.effect("Height")("Slider").value);',
+                '  link = ctrl.effect("Link Radii")("Checkbox").value > 0;',
+                '  rAll = Math.max(0, ctrl.effect("Radius All")("Slider").value);',
+                '  rTL = Math.max(0, link ? rAll : ctrl.effect("Radius Top-Left")("Slider").value);',
+                '  rTR = Math.max(0, link ? rAll : ctrl.effect("Radius Top-Right")("Slider").value);',
+                '  rBR = Math.max(0, link ? rAll : ctrl.effect("Radius Bottom-Right")("Slider").value);',
+                '  rBL = Math.max(0, link ? rAll : ctrl.effect("Radius Bottom-Left")("Slider").value);',
+                '} catch(e) {}',
+                '',
+                'var maxTop = rTL + rTR; if (maxTop > W) { var s = W / maxTop; rTL *= s; rTR *= s; }',
+                'var maxBot = rBL + rBR; if (maxBot > W) { var s = W / maxBot; rBL *= s; rBR *= s; }',
+                'var maxLeft = rTL + rBL; if (maxLeft > H) { var s = H / maxLeft; rTL *= s; rBL *= s; }',
+                'var maxRight = rTR + rBR; if (maxRight > H) { var s = H / maxRight; rTR *= s; rBR *= s; }',
+                '',
+                'var k = 0.5522847498;',
+                'var kTL = rTL * k, kTR = rTR * k, kBR = rBR * k, kBL = rBL * k;',
+                '',
+                'var pts = [',
+                '  [-W/2 + rTL, -H/2],',
+                '  [W/2 - rTR, -H/2],',
+                '  [W/2, -H/2 + rTR],',
+                '  [W/2, H/2 - rBR],',
+                '  [W/2 - rBR, H/2],',
+                '  [-W/2 + rBL, H/2],',
+                '  [-W/2, H/2 - rBL],',
+                '  [-W/2, -H/2 + rTL]',
+                '];',
+                'var inT = [',
+                '  [-kTL, 0], [0, 0], [0, -kTR], [0, 0], [kBR, 0], [0, 0], [0, kBL], [0, 0]',
+                '];',
+                'var outT = [',
+                '  [0, 0], [kTR, 0], [0, 0], [0, kBR], [0, 0], [-kBL, 0], [0, 0], [0, -kTL]',
+                '];',
+                'createPath(pts, inT, outT, true);'
+            ].join('\n');
+        },
+
+        // Screen Position inside 2D Wrapper
+        screenPosInside: function (targetCompName, isBack) {
+            var prefix = isBack ? "Back" : "Front";
+            return [
+                'var ctrl = null;',
+                'try { ctrl = comp("' + targetCompName + '").layer("Master Controller"); } catch(e) {}',
+                'if (!ctrl) {',
+                '  var cList = ["' + targetCompName + '", "Extruded_Round_Corners_1", "Extruded_Round_Corners_2", "Comp 1"];',
+                '  for (var i = 0; i < cList.length; i++) {',
+                '    try { ctrl = comp(cList[i]).layer("Master Controller"); if (ctrl) break; } catch(err) {}',
+                '  }',
+                '}',
+                '',
+                'var W = 600, H = 400, align = 0, off = [0, 0];',
+                'if (ctrl) {',
+                '  W = ctrl.effect("Width")("Slider").value;',
+                '  H = ctrl.effect("Height")("Slider").value;',
+                '  align = Math.round(ctrl.effect("' + prefix + ' Screen Alignment")("Slider").value);',
+                '  off = ctrl.effect("' + prefix + ' Screen Offset")("Point").value;',
+                '}',
+                '',
                 'var ax = 0, ay = 0;',
                 'switch (align) {',
                 '  case 1: ax = -W/2; ay = -H/2; break;',
@@ -403,26 +476,32 @@
                 '  case 8: ax = W/2;  ay = H/2;  break;',
                 '  default: ax = 0;   ay = 0;    break;',
                 '}',
-                '',
-                'var zBase = ' + (isBack ? 'd + (d >= 0 ? capOff + 0.1 : -capOff - 0.1)' : '(d >= 0 ? -capOff - 0.1 : capOff + 0.1)') + ';',
-                '[ax + off[0], ay + off[1], zBase];'
+                '[thisComp.width / 2 + ax + off[0], thisComp.height / 2 + ay + off[1]];'
             ].join('\n');
         },
 
-        // Screen Scale Expression
-        screenScale: function (isBack) {
+        // Screen Scale inside 2D Wrapper
+        screenScaleInside: function (targetCompName, isBack) {
             var prefix = isBack ? "Back" : "Front";
             return [
-                'var ctrl = thisComp.layer("Master Controller");',
-                'var W = Math.max(1, ctrl.effect("Width")("Slider").value);',
-                'var H = Math.max(1, ctrl.effect("Height")("Slider").value);',
-                'var mode = Math.round(ctrl.effect("' + prefix + ' Screen Scale Mode")("Slider").value);',
-                'var man = ctrl.effect("' + prefix + ' Screen Scale")("Slider").value / 100;',
+                'var ctrl = null;',
+                'try { ctrl = comp("' + targetCompName + '").layer("Master Controller"); } catch(e) {}',
+                'if (!ctrl) {',
+                '  var cList = ["' + targetCompName + '", "Extruded_Round_Corners_1", "Extruded_Round_Corners_2", "Comp 1"];',
+                '  for (var i = 0; i < cList.length; i++) {',
+                '    try { ctrl = comp(cList[i]).layer("Master Controller"); if (ctrl) break; } catch(err) {}',
+                '  }',
+                '}',
+                'var W = 600, H = 400, mode = 1, man = 1;',
+                'if (ctrl) {',
+                '  W = Math.max(1, ctrl.effect("Width")("Slider").value);',
+                '  H = Math.max(1, ctrl.effect("Height")("Slider").value);',
+                '  mode = Math.round(ctrl.effect("' + prefix + ' Screen Scale Mode")("Slider").value);',
+                '  man = ctrl.effect("' + prefix + ' Screen Scale")("Slider").value / 100;',
+                '}',
                 'var sw = sourceRectAtTime().width;',
                 'var sh = sourceRectAtTime().height;',
                 'if (sw <= 0) sw = 1920; if (sh <= 0) sh = 1080;',
-                '',
-                '// 0: Manual, 1: Fit Inside, 2: Fill / Cover, 3: Stretch',
                 'var sx = 100, sy = 100;',
                 'if (mode === 1) {',
                 '  var fit = Math.min(W / sw, H / sh) * 100 * man;',
@@ -436,15 +515,20 @@
                 '} else {',
                 '  sx = 100 * man; sy = 100 * man;',
                 '}',
-                '[sx, sy, 100];'
+                '[sx, sy];'
             ].join('\n');
         },
 
-        screenAnchor: function (isBack) {
+        // Screen Anchor inside 2D Wrapper
+        screenAnchorInside: function (targetCompName, isBack) {
             var prefix = isBack ? "Back" : "Front";
             return [
-                'var ctrl = thisComp.layer("Master Controller");',
-                'var align = Math.round(ctrl.effect("' + prefix + ' Screen Alignment")("Slider").value);',
+                'var ctrl = null;',
+                'try { ctrl = comp("' + targetCompName + '").layer("Master Controller"); } catch(e) {}',
+                'var align = 0;',
+                'if (ctrl) {',
+                '  align = Math.round(ctrl.effect("' + prefix + ' Screen Alignment")("Slider").value);',
+                '}',
                 'var sr = sourceRectAtTime();',
                 'var l = sr.left, t = sr.top, w = sr.width, h = sr.height;',
                 'var ax = l + w / 2, ay = t + h / 2;',
@@ -459,7 +543,7 @@
                 '  case 8: ax = l + w;     ay = t + h;     break;',
                 '  default: ax = l + w / 2; ay = t + h / 2; break;',
                 '}',
-                '[ax, ay, 0];'
+                '[ax, ay];'
             ].join('\n');
         },
 
@@ -671,65 +755,78 @@
             var capTop = createCapShapeLayer("Cap Top", true);
             var capBot = createCapShapeLayer("Cap Bottom", false);
 
-            // 3. Helper to create Screen Layer with Alpha Matte
+            // 3. Helper to create Screen Layer with Self-Contained 2D Pre-comp Matte
+            // (Works flawlessly in Classic 3D, Advanced 3D, and Cinema 4D with zero track-matte conflicts)
             function createScreenRig(isBack, sourceComp) {
                 var prefix = isBack ? "Back" : "Front";
+                var wrapW = Math.max(3840, targetComp.width * 2);
+                var wrapH = Math.max(2160, targetComp.height * 2);
 
-                // Matte layer (Shape layer copy of cap for clipping)
-                var matte = targetComp.layers.addShape();
-                matte.name = prefix + " Screen Matte";
-                matte.threeDLayer = true;
-                matte.parent = ctrl;
-                matte.shy = params.shySecondary;
+                // Create 2D Mounted Wrapper Comp
+                var wrapperComp = app.project.items.addComp(
+                    "[" + prefix + " Screen Mounted]",
+                    wrapW,
+                    wrapH,
+                    1.0,
+                    targetComp.duration,
+                    targetComp.frameRate
+                );
 
-                matte.property("ADBE Transform Group").property("ADBE Position").expression =
-                    isBack ? EXPRESSIONS.capBottomPos : EXPRESSIONS.capTopPos;
+                // Inside wrapper:
+                // 1. Matte Shape Layer (2D)
+                var matte = wrapperComp.layers.addShape();
+                matte.name = prefix + " Screen Matte (2D)";
+                matte.position.setValue([wrapW / 2, wrapH / 2]);
 
                 var matteContents = matte.property("ADBE Root Vectors Group");
                 var matteGroup = matteContents.addProperty("ADBE Vector Group");
                 var matteGroupVectors = matteGroup.property("ADBE Vectors Group");
                 var mattePath = matteGroupVectors.addProperty("ADBE Vector Shape - Group");
-                mattePath.property("ADBE Vector Shape").expression = EXPRESSIONS.capPath;
+                mattePath.property("ADBE Vector Shape").expression = EXPRESSIONS.capPathCrossComp(targetComp.name);
                 var matteFill = matteGroupVectors.addProperty("ADBE Vector Graphic - Fill");
                 matteFill.property("ADBE Vector Fill Color").setValue([1, 1, 1, 1]);
 
-                // Screen Comp Layer
-                var screenLayer = targetComp.layers.add(sourceComp);
+                // 2. User Content Comp Layer (2D)
+                var contentLayer = wrapperComp.layers.add(sourceComp);
+                contentLayer.name = "Content";
+                contentLayer.property("ADBE Transform Group").property("ADBE Anchor Point").expression =
+                    EXPRESSIONS.screenAnchorInside(targetComp.name, isBack);
+                contentLayer.property("ADBE Transform Group").property("ADBE Position").expression =
+                    EXPRESSIONS.screenPosInside(targetComp.name, isBack);
+                contentLayer.property("ADBE Transform Group").property("ADBE Scale").expression =
+                    EXPRESSIONS.screenScaleInside(targetComp.name, isBack);
+
+                // Set 2D Track Matte inside the wrapper
+                try {
+                    if (contentLayer.setTrackMatte) {
+                        contentLayer.setTrackMatte(matte, TrackMatteType.ALPHA);
+                    } else {
+                        matte.moveBefore(contentLayer);
+                        contentLayer.trackMatteType = TrackMatteType.ALPHA;
+                    }
+                } catch (e) {
+                    try {
+                        matte.moveBefore(contentLayer);
+                        contentLayer.trackMatteType = TrackMatteType.ALPHA;
+                    } catch (err) {}
+                }
+
+                // 3. Now add the wrapper as a single 3D layer onto the Cap in the 3D scene
+                var screenLayer = targetComp.layers.add(wrapperComp);
                 screenLayer.name = prefix + " Screen [Screen Content]";
                 screenLayer.threeDLayer = true;
                 screenLayer.parent = ctrl;
                 screenLayer.shy = false;
 
-                // Expressions for Screen Comp
-                screenLayer.property("ADBE Transform Group").property("ADBE Anchor Point").expression =
-                    EXPRESSIONS.screenAnchor(isBack);
                 screenLayer.property("ADBE Transform Group").property("ADBE Position").expression =
-                    EXPRESSIONS.screenPos(isBack);
-                screenLayer.property("ADBE Transform Group").property("ADBE Scale").expression =
-                    EXPRESSIONS.screenScale(isBack);
-                screenLayer.property("ADBE Transform Group").property("ADBE Opacity").expression =
-                    EXPRESSIONS.screenOpacity(isBack);
+                    EXPRESSIONS.screen3DPos(isBack);
 
                 if (isBack) {
                     screenLayer.property("ADBE Transform Group").property("ADBE Rotate Y").setValue(180);
                 }
 
-                // Set Track Matte (Alpha Matte)
-                // In AE CC 2023+ setTrackMatte, earlier versions use trackMatteType
-                try {
-                    if (screenLayer.setTrackMatte) {
-                        screenLayer.setTrackMatte(matte, TrackMatteType.ALPHA);
-                    } else {
-                        matte.moveBefore(screenLayer);
-                        screenLayer.trackMatteType = TrackMatteType.ALPHA;
-                    }
-                } catch (e) {
-                    // Fallback for older legacy AE versions
-                    try {
-                        matte.moveBefore(screenLayer);
-                        screenLayer.trackMatteType = TrackMatteType.ALPHA;
-                    } catch (err) {}
-                }
+                screenLayer.property("ADBE Transform Group").property("ADBE Opacity").expression =
+                    EXPRESSIONS.screenOpacity(isBack);
 
                 return screenLayer;
             }
