@@ -1,6 +1,9 @@
 # Ignore build_zxp as requested
 build_zxp/
 
+# Local helper scripts
+push_to_github.bat
+
 # OS generated files
 Thumbs.db
 .DS_Store
