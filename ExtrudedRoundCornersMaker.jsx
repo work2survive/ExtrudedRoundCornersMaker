@@ -1,13 +1,14 @@
 /**
- * Extruded Round Corners Maker v1.0.0
+ * Extruded Round Corners Maker v1.1.0
  * Adobe After Effects Script & ScriptUI Panel
  * 
  * Features:
  * - 2D & 3D Extruded Rounded Rectangle generator with independent corner radii.
- * - Non-C4D / Classic 3D native geometry: 2D segment strips (6-24 segments per corner arc).
- * - Animatable via Timeline & Expressions: Width, Height, Depth, Segments, Radii, Colors.
- * - Anti-gap & anti-clipping precision math (Seam overlap & Cap offset prevents Z-fighting).
- * - Screen / Composition reproduction on caps with auto-fit, auto-fill, stretch, alignment & offsets.
+ * - Non-C4D / Classic 3D native geometry: 2D segment strips with strictly needed count.
+ * - Dynamic Timeline & Expression Animation: Width, Height, Depth, Radii, Colors, Scale, Offset.
+ * - "Link All 4 Corners" boolean control: when active, all 4 corners use values from Top-Left.
+ * - Universal 2D Pre-comp Screen Wrapper: works flawlessly in Classic 3D & Advanced 3D without 3D track-matte breaking.
+ * - Anti-gap & anti-clipping precision math (sub-pixel seam overlap & cap Z-offset).
  * 
  * Compatible with Adobe After Effects CC 2018 through 2026+.
  * Distribution-ready for Adobe Exchange / aescripts.com
@@ -15,9 +16,8 @@
 
 (function (thisObj) {
 
-    // Global settings & defaults
     var SCRIPT_NAME = "Extruded Round Corners Maker";
-    var SCRIPT_VERSION = "1.0.0";
+    var SCRIPT_VERSION = "1.1.0";
 
     // Helper: Hex string to [R, G, B, A] normalized (0-1)
     function hexToRgba(hex, alpha) {
@@ -43,6 +43,21 @@
         return "#" + r + g + b;
     }
 
+    // Helper expression snippet to read radii with "Link All 4 Corners" logic
+    function getRadiiSnippet() {
+        return [
+            'var link = ctrl.effect("Link All 4 Corners")("Checkbox").value > 0;',
+            'var rTL = Math.max(0, ctrl.effect("Radius Top-Left")("Slider").value);',
+            'var rTR = Math.max(0, link ? rTL : ctrl.effect("Radius Top-Right")("Slider").value);',
+            'var rBR = Math.max(0, link ? rTL : ctrl.effect("Radius Bottom-Right")("Slider").value);',
+            'var rBL = Math.max(0, link ? rTL : ctrl.effect("Radius Bottom-Left")("Slider").value);',
+            'var maxTop = rTL + rTR; if (maxTop > W) { var s = W / maxTop; rTL *= s; rTR *= s; }',
+            'var maxBot = rBL + rBR; if (maxBot > W) { var s = W / maxBot; rBL *= s; rBR *= s; }',
+            'var maxLeft = rTL + rBL; if (maxLeft > H) { var s = H / maxLeft; rTL *= s; rBL *= s; }',
+            'var maxRight = rTR + rBR; if (maxRight > H) { var s = H / maxRight; rTR *= s; rBR *= s; }'
+        ].join('\n');
+    }
+
     // Expression templates
     var EXPRESSIONS = {
 
@@ -51,18 +66,7 @@
             'var ctrl = thisComp.layer("Master Controller");',
             'var W = Math.max(1, ctrl.effect("Width")("Slider").value);',
             'var H = Math.max(1, ctrl.effect("Height")("Slider").value);',
-            'var link = ctrl.effect("Link Radii")("Checkbox").value > 0;',
-            'var rAll = Math.max(0, ctrl.effect("Radius All")("Slider").value);',
-            'var rTL = Math.max(0, link ? rAll : ctrl.effect("Radius Top-Left")("Slider").value);',
-            'var rTR = Math.max(0, link ? rAll : ctrl.effect("Radius Top-Right")("Slider").value);',
-            'var rBR = Math.max(0, link ? rAll : ctrl.effect("Radius Bottom-Right")("Slider").value);',
-            'var rBL = Math.max(0, link ? rAll : ctrl.effect("Radius Bottom-Left")("Slider").value);',
-            '',
-            '// Proportional clamping to prevent corner overlap',
-            'var maxTop = rTL + rTR; if (maxTop > W) { var s = W / maxTop; rTL *= s; rTR *= s; }',
-            'var maxBot = rBL + rBR; if (maxBot > W) { var s = W / maxBot; rBL *= s; rBR *= s; }',
-            'var maxLeft = rTL + rBL; if (maxLeft > H) { var s = H / maxLeft; rTL *= s; rBL *= s; }',
-            'var maxRight = rTR + rBR; if (maxRight > H) { var s = H / maxRight; rTR *= s; rBR *= s; }',
+            getRadiiSnippet(),
             '',
             'var k = 0.5522847498;',
             'var kTL = rTL * k;',
@@ -106,7 +110,7 @@
             'createPath(pts, inT, outT, true);'
         ].join('\n'),
 
-        // Top Cap Z-Position (anti-clipping slight offset)
+        // Cap Z-Positions
         capTopPos: [
             'var ctrl = thisComp.layer("Master Controller");',
             'var off = ctrl.effect("Cap Z-Offset (px)")("Slider").value;',
@@ -114,7 +118,6 @@
             '[0, 0, (d >= 0 ? -off : off)];'
         ].join('\n'),
 
-        // Bottom Cap Z-Position and visibility
         capBottomPos: [
             'var ctrl = thisComp.layer("Master Controller");',
             'var off = ctrl.effect("Cap Z-Offset (px)")("Slider").value;',
@@ -127,20 +130,17 @@
             'ctrl.effect("Extruded")("Checkbox").value > 0 ? 100 : 0;'
         ].join('\n'),
 
-        // Straight Walls
         straightWallOpacity: [
             'var ctrl = thisComp.layer("Master Controller");',
             'ctrl.effect("Extruded")("Checkbox").value > 0 ? 100 : 0;'
         ].join('\n'),
 
+        // Straight Wall Sizes & Positions
         topWallSize: [
             'var ctrl = thisComp.layer("Master Controller");',
             'var W = Math.max(1, ctrl.effect("Width")("Slider").value);',
-            'var link = ctrl.effect("Link Radii")("Checkbox").value > 0;',
-            'var rAll = Math.max(0, ctrl.effect("Radius All")("Slider").value);',
-            'var rTL = Math.max(0, link ? rAll : ctrl.effect("Radius Top-Left")("Slider").value);',
-            'var rTR = Math.max(0, link ? rAll : ctrl.effect("Radius Top-Right")("Slider").value);',
-            'var maxTop = rTL + rTR; if (maxTop > W) { var s = W / maxTop; rTL *= s; rTR *= s; }',
+            'var H = Math.max(1, ctrl.effect("Height")("Slider").value);',
+            getRadiiSnippet(),
             'var seam = ctrl.effect("Seam Overlap (px)")("Slider").value;',
             'var d = Math.abs(ctrl.effect("Extrusion Depth")("Slider").value);',
             '[Math.max(0.1, W - rTL - rTR + seam), Math.max(0.1, d)];'
@@ -150,11 +150,7 @@
             'var ctrl = thisComp.layer("Master Controller");',
             'var W = ctrl.effect("Width")("Slider").value;',
             'var H = ctrl.effect("Height")("Slider").value;',
-            'var link = ctrl.effect("Link Radii")("Checkbox").value > 0;',
-            'var rAll = Math.max(0, ctrl.effect("Radius All")("Slider").value);',
-            'var rTL = Math.max(0, link ? rAll : ctrl.effect("Radius Top-Left")("Slider").value);',
-            'var rTR = Math.max(0, link ? rAll : ctrl.effect("Radius Top-Right")("Slider").value);',
-            'var maxTop = rTL + rTR; if (maxTop > W) { var s = W / maxTop; rTL *= s; rTR *= s; }',
+            getRadiiSnippet(),
             'var d = ctrl.effect("Extrusion Depth")("Slider").value;',
             '[(rTL - rTR) / 2, -H / 2, d / 2];'
         ].join('\n'),
@@ -162,11 +158,8 @@
         bottomWallSize: [
             'var ctrl = thisComp.layer("Master Controller");',
             'var W = Math.max(1, ctrl.effect("Width")("Slider").value);',
-            'var link = ctrl.effect("Link Radii")("Checkbox").value > 0;',
-            'var rAll = Math.max(0, ctrl.effect("Radius All")("Slider").value);',
-            'var rBL = Math.max(0, link ? rAll : ctrl.effect("Radius Bottom-Left")("Slider").value);',
-            'var rBR = Math.max(0, link ? rAll : ctrl.effect("Radius Bottom-Right")("Slider").value);',
-            'var maxBot = rBL + rBR; if (maxBot > W) { var s = W / maxBot; rBL *= s; rBR *= s; }',
+            'var H = Math.max(1, ctrl.effect("Height")("Slider").value);',
+            getRadiiSnippet(),
             'var seam = ctrl.effect("Seam Overlap (px)")("Slider").value;',
             'var d = Math.abs(ctrl.effect("Extrusion Depth")("Slider").value);',
             '[Math.max(0.1, W - rBL - rBR + seam), Math.max(0.1, d)];'
@@ -176,23 +169,16 @@
             'var ctrl = thisComp.layer("Master Controller");',
             'var W = ctrl.effect("Width")("Slider").value;',
             'var H = ctrl.effect("Height")("Slider").value;',
-            'var link = ctrl.effect("Link Radii")("Checkbox").value > 0;',
-            'var rAll = Math.max(0, ctrl.effect("Radius All")("Slider").value);',
-            'var rBL = Math.max(0, link ? rAll : ctrl.effect("Radius Bottom-Left")("Slider").value);',
-            'var rBR = Math.max(0, link ? rAll : ctrl.effect("Radius Bottom-Right")("Slider").value);',
-            'var maxBot = rBL + rBR; if (maxBot > W) { var s = W / maxBot; rBL *= s; rBR *= s; }',
+            getRadiiSnippet(),
             'var d = ctrl.effect("Extrusion Depth")("Slider").value;',
             '[(rBL - rBR) / 2, H / 2, d / 2];'
         ].join('\n'),
 
         leftWallSize: [
             'var ctrl = thisComp.layer("Master Controller");',
+            'var W = Math.max(1, ctrl.effect("Width")("Slider").value);',
             'var H = Math.max(1, ctrl.effect("Height")("Slider").value);',
-            'var link = ctrl.effect("Link Radii")("Checkbox").value > 0;',
-            'var rAll = Math.max(0, ctrl.effect("Radius All")("Slider").value);',
-            'var rTL = Math.max(0, link ? rAll : ctrl.effect("Radius Top-Left")("Slider").value);',
-            'var rBL = Math.max(0, link ? rAll : ctrl.effect("Radius Bottom-Left")("Slider").value);',
-            'var maxLeft = rTL + rBL; if (maxLeft > H) { var s = H / maxLeft; rTL *= s; rBL *= s; }',
+            getRadiiSnippet(),
             'var seam = ctrl.effect("Seam Overlap (px)")("Slider").value;',
             'var d = Math.abs(ctrl.effect("Extrusion Depth")("Slider").value);',
             '[Math.max(0.1, H - rTL - rBL + seam), Math.max(0.1, d)];'
@@ -202,23 +188,16 @@
             'var ctrl = thisComp.layer("Master Controller");',
             'var W = ctrl.effect("Width")("Slider").value;',
             'var H = ctrl.effect("Height")("Slider").value;',
-            'var link = ctrl.effect("Link Radii")("Checkbox").value > 0;',
-            'var rAll = Math.max(0, ctrl.effect("Radius All")("Slider").value);',
-            'var rTL = Math.max(0, link ? rAll : ctrl.effect("Radius Top-Left")("Slider").value);',
-            'var rBL = Math.max(0, link ? rAll : ctrl.effect("Radius Bottom-Left")("Slider").value);',
-            'var maxLeft = rTL + rBL; if (maxLeft > H) { var s = H / maxLeft; rTL *= s; rBL *= s; }',
+            getRadiiSnippet(),
             'var d = ctrl.effect("Extrusion Depth")("Slider").value;',
             '[-W / 2, (rTL - rBL) / 2, d / 2];'
         ].join('\n'),
 
         rightWallSize: [
             'var ctrl = thisComp.layer("Master Controller");',
+            'var W = Math.max(1, ctrl.effect("Width")("Slider").value);',
             'var H = Math.max(1, ctrl.effect("Height")("Slider").value);',
-            'var link = ctrl.effect("Link Radii")("Checkbox").value > 0;',
-            'var rAll = Math.max(0, ctrl.effect("Radius All")("Slider").value);',
-            'var rTR = Math.max(0, link ? rAll : ctrl.effect("Radius Top-Right")("Slider").value);',
-            'var rBR = Math.max(0, link ? rAll : ctrl.effect("Radius Bottom-Right")("Slider").value);',
-            'var maxRight = rTR + rBR; if (maxRight > H) { var s = H / maxRight; rTR *= s; rBR *= s; }',
+            getRadiiSnippet(),
             'var seam = ctrl.effect("Seam Overlap (px)")("Slider").value;',
             'var d = Math.abs(ctrl.effect("Extrusion Depth")("Slider").value);',
             '[Math.max(0.1, H - rTR - rBR + seam), Math.max(0.1, d)];'
@@ -228,154 +207,78 @@
             'var ctrl = thisComp.layer("Master Controller");',
             'var W = ctrl.effect("Width")("Slider").value;',
             'var H = ctrl.effect("Height")("Slider").value;',
-            'var link = ctrl.effect("Link Radii")("Checkbox").value > 0;',
-            'var rAll = Math.max(0, ctrl.effect("Radius All")("Slider").value);',
-            'var rTR = Math.max(0, link ? rAll : ctrl.effect("Radius Top-Right")("Slider").value);',
-            'var rBR = Math.max(0, link ? rAll : ctrl.effect("Radius Bottom-Right")("Slider").value);',
-            'var maxRight = rTR + rBR; if (maxRight > H) { var s = H / maxRight; rTR *= s; rBR *= s; }',
+            getRadiiSnippet(),
             'var d = ctrl.effect("Extrusion Depth")("Slider").value;',
             '[W / 2, (rTR - rBR) / 2, d / 2];'
         ].join('\n'),
 
-        // Corner Arc Segments Generator Expression
-        // corner: 'TL', 'TR', 'BR', 'BL'; index: k (0 to segMax - 1)
-        cornerSegmentSize: function (corner) {
+        // Corner Arc Segments (Discretized into strictly needed count)
+        cornerSegmentSize: function (corner, S) {
+            var delta = (Math.PI / 2) / S;
+            var sinFactor = 2 * Math.sin(delta / 2);
             return [
                 'var ctrl = thisComp.layer("Master Controller");',
                 'var W = Math.max(1, ctrl.effect("Width")("Slider").value);',
                 'var H = Math.max(1, ctrl.effect("Height")("Slider").value);',
-                'var link = ctrl.effect("Link Radii")("Checkbox").value > 0;',
-                'var rAll = Math.max(0, ctrl.effect("Radius All")("Slider").value);',
-                'var rTL = Math.max(0, link ? rAll : ctrl.effect("Radius Top-Left")("Slider").value);',
-                'var rTR = Math.max(0, link ? rAll : ctrl.effect("Radius Top-Right")("Slider").value);',
-                'var rBR = Math.max(0, link ? rAll : ctrl.effect("Radius Bottom-Right")("Slider").value);',
-                'var rBL = Math.max(0, link ? rAll : ctrl.effect("Radius Bottom-Left")("Slider").value);',
-                'var maxTop = rTL + rTR; if (maxTop > W) { var s = W / maxTop; rTL *= s; rTR *= s; }',
-                'var maxBot = rBL + rBR; if (maxBot > W) { var s = W / maxBot; rBL *= s; rBR *= s; }',
-                'var maxLeft = rTL + rBL; if (maxLeft > H) { var s = H / maxLeft; rTL *= s; rBL *= s; }',
-                'var maxRight = rTR + rBR; if (maxRight > H) { var s = H / maxRight; rTR *= s; rBR *= s; }',
+                getRadiiSnippet(),
                 'var R = ' + (corner === 'TL' ? 'rTL' : corner === 'TR' ? 'rTR' : corner === 'BR' ? 'rBR' : 'rBL') + ';',
-                'var S = Math.max(6, Math.min(24, Math.round(ctrl.effect("Corner Segments")("Slider").value)));',
                 'var seam = ctrl.effect("Seam Overlap (px)")("Slider").value;',
                 'var d = Math.abs(ctrl.effect("Extrusion Depth")("Slider").value);',
-                'var chordW = (R > 0.1) ? (2 * R * Math.sin(Math.PI / (4 * S)) + seam) : 0;',
+                'var chordW = (R > 0.1) ? (R * ' + sinFactor + ' + seam) : 0;',
                 '[Math.max(0.1, chordW), Math.max(0.1, d)];'
             ].join('\n');
         },
 
-        cornerSegmentPos: function (corner, k) {
+        cornerSegmentPos: function (corner, k, S) {
             var startAngle = this.cornerStartAngle(corner);
+            var delta = (Math.PI / 2) / S;
+            var phi = startAngle + (k + 0.5) * delta;
+            var rChordFactor = Math.cos(delta / 2);
             return [
                 'var ctrl = thisComp.layer("Master Controller");',
                 'var W = Math.max(1, ctrl.effect("Width")("Slider").value);',
                 'var H = Math.max(1, ctrl.effect("Height")("Slider").value);',
-                'var link = ctrl.effect("Link Radii")("Checkbox").value > 0;',
-                'var rAll = Math.max(0, ctrl.effect("Radius All")("Slider").value);',
-                'var rTL = Math.max(0, link ? rAll : ctrl.effect("Radius Top-Left")("Slider").value);',
-                'var rTR = Math.max(0, link ? rAll : ctrl.effect("Radius Top-Right")("Slider").value);',
-                'var rBR = Math.max(0, link ? rAll : ctrl.effect("Radius Bottom-Right")("Slider").value);',
-                'var rBL = Math.max(0, link ? rAll : ctrl.effect("Radius Bottom-Left")("Slider").value);',
-                'var maxTop = rTL + rTR; if (maxTop > W) { var s = W / maxTop; rTL *= s; rTR *= s; }',
-                'var maxBot = rBL + rBR; if (maxBot > W) { var s = W / maxBot; rBL *= s; rBR *= s; }',
-                'var maxLeft = rTL + rBL; if (maxLeft > H) { var s = H / maxLeft; rTL *= s; rBL *= s; }',
-                'var maxRight = rTR + rBR; if (maxRight > H) { var s = H / maxRight; rTR *= s; rBR *= s; }',
+                getRadiiSnippet(),
                 'var R = ' + (corner === 'TL' ? 'rTL' : corner === 'TR' ? 'rTR' : corner === 'BR' ? 'rBR' : 'rBL') + ';',
-                'var S = Math.max(6, Math.min(24, Math.round(ctrl.effect("Corner Segments")("Slider").value)));',
                 'var d = ctrl.effect("Extrusion Depth")("Slider").value;',
-                'var delta = (Math.PI / 2) / S;',
-                'var phi = ' + startAngle + ' + (' + k + ' + 0.5) * delta;',
-                'var rChord = R * Math.cos(delta / 2);',
-                'var cx = ' + this.cornerCenterX(corner) + ';',
-                'var cy = ' + this.cornerCenterY(corner) + ';',
+                'var cx = ' + (corner === 'TL' ? '-W/2 + R' : corner === 'TR' ? 'W/2 - R' : corner === 'BR' ? 'W/2 - R' : '-W/2 + R') + ';',
+                'var cy = ' + (corner === 'TL' ? '-H/2 + R' : corner === 'TR' ? '-H/2 + R' : corner === 'BR' ? 'H/2 - R' : 'H/2 - R') + ';',
+                'var rChord = R * ' + rChordFactor + ';',
+                'var phi = ' + phi + ';',
                 '[cx + rChord * Math.cos(phi), cy + rChord * Math.sin(phi), d / 2];'
             ].join('\n');
         },
 
-        cornerSegmentRotY: function (corner, k) {
+        cornerSegmentRotY: function (corner, k, S) {
             var startAngle = this.cornerStartAngle(corner);
-            return [
-                'var ctrl = thisComp.layer("Master Controller");',
-                'var S = Math.max(6, Math.min(24, Math.round(ctrl.effect("Corner Segments")("Slider").value)));',
-                'var delta = (Math.PI / 2) / S;',
-                'var phi = ' + startAngle + ' + (' + k + ' + 0.5) * delta;',
-                '(phi * 180 / Math.PI) + 90;'
-            ].join('\n');
+            var delta = (Math.PI / 2) / S;
+            var phi = startAngle + (k + 0.5) * delta;
+            return (phi * 180 / Math.PI) + 90;
         },
 
-        cornerSegmentOpacity: function (k) {
-            return [
-                'var ctrl = thisComp.layer("Master Controller");',
-                'var isExt = ctrl.effect("Extruded")("Checkbox").value > 0;',
-                'var S = Math.max(6, Math.min(24, Math.round(ctrl.effect("Corner Segments")("Slider").value)));',
-                '(isExt && (' + k + ' < S)) ? 100 : 0;'
-            ].join('\n');
-        },
-
-        cornerSegmentColor: function (corner, k) {
+        cornerSegmentColor: function (corner, k, S) {
             var startAngle = this.cornerStartAngle(corner);
+            var delta = (Math.PI / 2) / S;
+            var phi = startAngle + (k + 0.5) * delta;
             return [
                 'var ctrl = thisComp.layer("Master Controller");',
                 'var baseCol = ctrl.effect("Edge Color")("Color").value;',
                 'var shd = ctrl.effect("Shading Intensity")("Slider").value / 100;',
-                'var S = Math.max(6, Math.min(24, Math.round(ctrl.effect("Corner Segments")("Slider").value)));',
-                'var delta = (Math.PI / 2) / S;',
-                'var phi = ' + startAngle + ' + (' + k + ' + 0.5) * delta;',
-                '// Subtle cylindrical ambient lighting simulation',
+                'var phi = ' + phi + ';',
                 'var lightFactor = 1 - Math.cos(phi) * shd * 0.5;',
                 'lightFactor = Math.max(0.2, Math.min(1.4, lightFactor));',
                 '[baseCol[0] * lightFactor, baseCol[1] * lightFactor, baseCol[2] * lightFactor, baseCol[3]];'
             ].join('\n');
         },
 
-        // Helper calculations for corners
-        cornerParamName: function (corner) {
-            switch (corner) {
-                case 'TL': return 'Radius Top-Left';
-                case 'TR': return 'Radius Top-Right';
-                case 'BR': return 'Radius Bottom-Right';
-                case 'BL': return 'Radius Bottom-Left';
-            }
-            return 'Radius All';
-        },
-
-        cornerClampSnippet: function (corner) {
-            switch (corner) {
-                case 'TL': return 'R = Math.min(R, Math.min(W / 2, H / 2));';
-                case 'TR': return 'R = Math.min(R, Math.min(W / 2, H / 2));';
-                case 'BR': return 'R = Math.min(R, Math.min(W / 2, H / 2));';
-                case 'BL': return 'R = Math.min(R, Math.min(W / 2, H / 2));';
-            }
-            return '';
-        },
-
         cornerStartAngle: function (corner) {
             switch (corner) {
-                case 'TL': return '-Math.PI';
-                case 'TR': return '-Math.PI / 2';
-                case 'BR': return '0';
-                case 'BL': return 'Math.PI / 2';
+                case 'TL': return -Math.PI;
+                case 'TR': return -Math.PI / 2;
+                case 'BR': return 0;
+                case 'BL': return Math.PI / 2;
             }
-            return '0';
-        },
-
-        cornerCenterX: function (corner) {
-            switch (corner) {
-                case 'TL': return '-W / 2 + R';
-                case 'TR': return 'W / 2 - R';
-                case 'BR': return 'W / 2 - R';
-                case 'BL': return '-W / 2 + R';
-            }
-            return '0';
-        },
-
-        cornerCenterY: function (corner) {
-            switch (corner) {
-                case 'TL': return '-H / 2 + R';
-                case 'TR': return '-H / 2 + R';
-                case 'BR': return 'H / 2 - R';
-                case 'BL': return 'H / 2 - R';
-            }
-            return '0';
+            return 0;
         },
 
         // Screen Position in 3D scene (Placed snug on Cap without 3D track-matte conflicts)
@@ -403,22 +306,13 @@
                 '}',
                 'if (!ctrl) ctrl = thisLayer;',
                 '',
-                'var W = 600, H = 400, rAll = 80, link = true, rTL = 80, rTR = 80, rBR = 80, rBL = 80;',
+                'var W = 600, H = 400;',
                 'try {',
                 '  W = Math.max(1, ctrl.effect("Width")("Slider").value);',
                 '  H = Math.max(1, ctrl.effect("Height")("Slider").value);',
-                '  link = ctrl.effect("Link Radii")("Checkbox").value > 0;',
-                '  rAll = Math.max(0, ctrl.effect("Radius All")("Slider").value);',
-                '  rTL = Math.max(0, link ? rAll : ctrl.effect("Radius Top-Left")("Slider").value);',
-                '  rTR = Math.max(0, link ? rAll : ctrl.effect("Radius Top-Right")("Slider").value);',
-                '  rBR = Math.max(0, link ? rAll : ctrl.effect("Radius Bottom-Right")("Slider").value);',
-                '  rBL = Math.max(0, link ? rAll : ctrl.effect("Radius Bottom-Left")("Slider").value);',
                 '} catch(e) {}',
                 '',
-                'var maxTop = rTL + rTR; if (maxTop > W) { var s = W / maxTop; rTL *= s; rTR *= s; }',
-                'var maxBot = rBL + rBR; if (maxBot > W) { var s = W / maxBot; rBL *= s; rBR *= s; }',
-                'var maxLeft = rTL + rBL; if (maxLeft > H) { var s = H / maxLeft; rTL *= s; rBL *= s; }',
-                'var maxRight = rTR + rBR; if (maxRight > H) { var s = H / maxRight; rTR *= s; rBR *= s; }',
+                getRadiiSnippet(),
                 '',
                 'var k = 0.5522847498;',
                 'var kTL = rTL * k, kTR = rTR * k, kBR = rBR * k, kBL = rBL * k;',
@@ -582,10 +476,9 @@
                     comp.duration,
                     comp.frameRate
                 );
-                // Add precomp to current comp
                 masterCompLayer = comp.layers.add(precomp);
                 masterCompLayer.threeDLayer = true;
-                masterCompLayer.collapseTransformation = true; // Essential for 3D nested layers
+                masterCompLayer.collapseTransformation = true;
                 targetComp = precomp;
             }
 
@@ -609,13 +502,10 @@
             fxHeight.name = "Height";
             fxHeight.property(1).setValue(params.height);
 
+            // Link All 4 Corners boolean: when active, all 4 corners use values from Top-Left
             var fxLink = ctrl.property("ADBE Effect Parade").addProperty("ADBE Checkbox Control");
-            fxLink.name = "Link Radii";
+            fxLink.name = "Link All 4 Corners";
             fxLink.property(1).setValue(params.linkRadii ? 1 : 0);
-
-            var fxRadAll = ctrl.property("ADBE Effect Parade").addProperty("ADBE Slider Control");
-            fxRadAll.name = "Radius All";
-            fxRadAll.property(1).setValue(params.radiusAll);
 
             var fxRadTL = ctrl.property("ADBE Effect Parade").addProperty("ADBE Slider Control");
             fxRadTL.name = "Radius Top-Left";
@@ -637,10 +527,6 @@
             var fxDepth = ctrl.property("ADBE Effect Parade").addProperty("ADBE Slider Control");
             fxDepth.name = "Extrusion Depth";
             fxDepth.property(1).setValue(params.depth);
-
-            var fxSegments = ctrl.property("ADBE Effect Parade").addProperty("ADBE Slider Control");
-            fxSegments.name = "Corner Segments";
-            fxSegments.property(1).setValue(params.segments);
 
             var fxSeam = ctrl.property("ADBE Effect Parade").addProperty("ADBE Slider Control");
             fxSeam.name = "Seam Overlap (px)";
@@ -725,7 +611,6 @@
                 shapeLayer.parent = ctrl;
                 shapeLayer.shy = false;
 
-                // Set position expression
                 shapeLayer.property("ADBE Transform Group").property("ADBE Position").expression =
                     isTop ? EXPRESSIONS.capTopPos : EXPRESSIONS.capBottomPos;
 
@@ -734,7 +619,6 @@
                         EXPRESSIONS.capBottomOpacity;
                 }
 
-                // Add Shape Group, Path, and Fill
                 var contents = shapeLayer.property("ADBE Root Vectors Group");
                 var shapeGroup = contents.addProperty("ADBE Vector Group");
                 shapeGroup.name = "Cap Shape";
@@ -756,7 +640,7 @@
             var capBot = createCapShapeLayer("Cap Bottom", false);
 
             // 3. Helper to create Screen Layer with Self-Contained 2D Pre-comp Matte
-            // (Works flawlessly in Classic 3D, Advanced 3D, and Cinema 4D with zero track-matte conflicts)
+            // (Works flawlessly in Classic 3D, Advanced 3D, and Cinema 4D without 3D track-matte conflicts)
             function createScreenRig(isBack, sourceComp) {
                 var prefix = isBack ? "Back" : "Front";
                 var wrapW = Math.max(3840, targetComp.width * 2);
@@ -772,8 +656,7 @@
                     targetComp.frameRate
                 );
 
-                // Inside wrapper:
-                // 1. Matte Shape Layer (2D)
+                // 1. Matte Shape Layer (2D) inside wrapper
                 var matte = wrapperComp.layers.addShape();
                 matte.name = prefix + " Screen Matte (2D)";
                 matte.position.setValue([wrapW / 2, wrapH / 2]);
@@ -786,7 +669,7 @@
                 var matteFill = matteGroupVectors.addProperty("ADBE Vector Graphic - Fill");
                 matteFill.property("ADBE Vector Fill Color").setValue([1, 1, 1, 1]);
 
-                // 2. User Content Comp Layer (2D)
+                // 2. User Content Comp Layer (2D) inside wrapper
                 var contentLayer = wrapperComp.layers.add(sourceComp);
                 contentLayer.name = "Content";
                 contentLayer.property("ADBE Transform Group").property("ADBE Anchor Point").expression =
@@ -811,7 +694,7 @@
                     } catch (err) {}
                 }
 
-                // 3. Now add the wrapper as a single 3D layer onto the Cap in the 3D scene
+                // 3. Add the wrapper as a single 3D layer into the 3D scene (targetComp)
                 var screenLayer = targetComp.layers.add(wrapperComp);
                 screenLayer.name = prefix + " Screen [Screen Content]";
                 screenLayer.threeDLayer = true;
@@ -836,7 +719,6 @@
                 var screenFrontComp = null;
                 var screenBackComp = null;
 
-                // Function to create stylish sample placeholder screen precomp
                 function createPlaceholderComp(title) {
                     var sComp = app.project.items.addComp(
                         title,
@@ -846,9 +728,7 @@
                         comp.duration,
                         comp.frameRate
                     );
-                    // Background solid
                     var bg = sComp.layers.addSolid([0.1, 0.12, 0.15], "Background", 1920, 1080, 1.0);
-                    // Stylized grid or gradient graphic
                     var centerNull = sComp.layers.addNull();
                     centerNull.position.setValue([960, 540]);
 
@@ -916,13 +796,13 @@
             createStraightWall("Wall Left", EXPRESSIONS.leftWallSize, EXPRESSIONS.leftWallPos, 90, -90, 0);
             createStraightWall("Wall Right", EXPRESSIONS.rightWallSize, EXPRESSIONS.rightWallPos, 90, 90, 0);
 
-            // 5. Create Corner Arc Segments (Discretized into 2D strips)
-            var segLimit = params.dynamicSegments ? 24 : params.segments;
+            // 5. Create Corner Arc Segments (STRICTLY THE NEEDED COUNT, NO BLOAT)
+            var S = params.segments; // e.g. 6 to 24 strictly needed
             var corners = ["TL", "TR", "BR", "BL"];
 
             for (var c = 0; c < corners.length; c++) {
                 var cName = corners[c];
-                for (var k = 0; k < segLimit; k++) {
+                for (var k = 0; k < S; k++) {
                     var segLayer = targetComp.layers.addShape();
                     segLayer.name = "Arc " + cName + " [" + (k + 1) + "]";
                     segLayer.threeDLayer = true;
@@ -930,21 +810,21 @@
                     segLayer.shy = params.shySecondary;
 
                     var tr = segLayer.property("ADBE Transform Group");
-                    tr.property("ADBE Position").expression = EXPRESSIONS.cornerSegmentPos(cName, k);
+                    tr.property("ADBE Position").expression = EXPRESSIONS.cornerSegmentPos(cName, k, S);
                     tr.property("ADBE Rotate X").setValue(90);
-                    tr.property("ADBE Rotate Y").expression = EXPRESSIONS.cornerSegmentRotY(cName, k);
+                    tr.property("ADBE Rotate Y").setValue(EXPRESSIONS.cornerSegmentRotY(cName, k, S));
                     tr.property("ADBE Rotate Z").setValue(0);
-                    tr.property("ADBE Opacity").expression = EXPRESSIONS.cornerSegmentOpacity(k);
+                    tr.property("ADBE Opacity").expression = EXPRESSIONS.straightWallOpacity;
 
                     var contents = segLayer.property("ADBE Root Vectors Group");
                     var grp = contents.addProperty("ADBE Vector Group");
                     var gVecs = grp.property("ADBE Vectors Group");
 
                     var rect = gVecs.addProperty("ADBE Vector Shape - Rect");
-                    rect.property("ADBE Vector Rect Size").expression = EXPRESSIONS.cornerSegmentSize(cName);
+                    rect.property("ADBE Vector Rect Size").expression = EXPRESSIONS.cornerSegmentSize(cName, S);
 
                     var fill = gVecs.addProperty("ADBE Vector Graphic - Fill");
-                    fill.property("ADBE Vector Fill Color").expression = EXPRESSIONS.cornerSegmentColor(cName, k);
+                    fill.property("ADBE Vector Fill Color").expression = EXPRESSIONS.cornerSegmentColor(cName, k, S);
                 }
             }
 
@@ -1024,32 +904,18 @@
         radPnl.alignChildren = ["fill", "top"];
         radPnl.spacing = 4;
 
-        var linkCheck = radPnl.add("checkbox", undefined, "Link All 4 Corners");
+        var linkCheck = radPnl.add("checkbox", undefined, "Link All 4 Corners (Uses Top-Left)");
         linkCheck.value = true;
 
-        var rAllGrp = radPnl.add("group");
-        rAllGrp.add("statictext", undefined, "Radius All:").characters = 10;
-        var editRadAll = rAllGrp.add("edittext", undefined, "80");
-        editRadAll.characters = 5;
-        var slRadAll = rAllGrp.add("slider", undefined, 80, 0, 500);
-        slRadAll.onChanging = function () { editRadAll.text = Math.round(this.value); };
-        editRadAll.onChange = function () { slRadAll.value = parseFloat(this.text) || 80; };
-
-        // Independent Radii Container
-        var indepPnl = radPnl.add("group");
-        indepPnl.orientation = "column";
-        indepPnl.alignChildren = ["fill", "top"];
-        indepPnl.visible = false;
-
         function addRadiusRow(label, defaultVal) {
-            var g = indepPnl.add("group");
-            g.add("statictext", undefined, label).characters = 10;
+            var g = radPnl.add("group");
+            g.add("statictext", undefined, label).characters = 12;
             var ed = g.add("edittext", undefined, defaultVal.toString());
             ed.characters = 5;
             var sl = g.add("slider", undefined, defaultVal, 0, 500);
             sl.onChanging = function () { ed.text = Math.round(this.value); };
             ed.onChange = function () { sl.value = parseFloat(this.text) || defaultVal; };
-            return { edit: ed, slider: sl };
+            return { group: g, edit: ed, slider: sl };
         }
 
         var rTL = addRadiusRow("Top-Left:", 80);
@@ -1057,11 +923,34 @@
         var rBR = addRadiusRow("Bottom-Right:", 80);
         var rBL = addRadiusRow("Bottom-Left:", 80);
 
-        linkCheck.onClick = function () {
-            rAllGrp.visible = this.value;
-            indepPnl.visible = !this.value;
-            win.layout.layout(true);
+        function updateRadiiUI() {
+            var isLinked = linkCheck.value;
+            rTR.group.enabled = !isLinked;
+            rBR.group.enabled = !isLinked;
+            rBL.group.enabled = !isLinked;
+            if (isLinked) {
+                rTR.edit.text = rTL.edit.text;
+                rTR.slider.value = rTL.slider.value;
+                rBR.edit.text = rTL.edit.text;
+                rBR.slider.value = rTL.slider.value;
+                rBL.edit.text = rTL.edit.text;
+                rBL.slider.value = rTL.slider.value;
+            }
+        }
+
+        rTL.slider.onChanging = function () {
+            rTL.edit.text = Math.round(this.value);
+            if (linkCheck.value) updateRadiiUI();
         };
+        rTL.edit.onChange = function () {
+            rTL.slider.value = parseFloat(this.text) || 0;
+            if (linkCheck.value) updateRadiiUI();
+        };
+
+        linkCheck.onClick = function () {
+            updateRadiiUI();
+        };
+        updateRadiiUI();
 
         // ---------------- TAB 2: EXTRUSION & EDGES ----------------
         var tabExt = tabPnl.add("tab", undefined, "Extrusion");
@@ -1077,43 +966,43 @@
 
         // Depth
         var depthGrp = extPnl.add("group");
-        depthGrp.add("statictext", undefined, "Depth:").characters = 12;
+        depthGrp.add("statictext", undefined, "Depth:").characters = 14;
         var editDepth = depthGrp.add("edittext", undefined, "60");
         editDepth.characters = 6;
         var slDepth = depthGrp.add("slider", undefined, 60, -500, 500);
         slDepth.onChanging = function () { editDepth.text = Math.round(this.value); };
         editDepth.onChange = function () { slDepth.value = parseFloat(this.text) || 60; };
 
-        // Segments (6 - 24)
+        // Segments (6 - 24 strictly needed)
         var segGrp = extPnl.add("group");
-        segGrp.add("statictext", undefined, "Arc Segments:").characters = 12;
-        var editSeg = segGrp.add("edittext", undefined, "12");
+        segGrp.add("statictext", undefined, "Arc Segments:").characters = 14;
+        var editSeg = segGrp.add("edittext", undefined, "10");
         editSeg.characters = 6;
-        var slSeg = segGrp.add("slider", undefined, 12, 6, 24);
+        var slSeg = segGrp.add("slider", undefined, 10, 6, 24);
         slSeg.onChanging = function () { editSeg.text = Math.round(this.value); };
         editSeg.onChange = function () {
-            var val = Math.max(6, Math.min(24, Math.round(parseFloat(this.text) || 12)));
+            var val = Math.max(6, Math.min(24, Math.round(parseFloat(this.text) || 10)));
             this.text = val.toString();
             slSeg.value = val;
         };
 
         // Precision Seam Overlap
         var seamGrp = extPnl.add("group");
-        seamGrp.add("statictext", undefined, "Seam Overlap:").characters = 12;
+        seamGrp.add("statictext", undefined, "Seam Overlap:").characters = 14;
         var editSeam = seamGrp.add("edittext", undefined, "0.5");
         editSeam.characters = 6;
         seamGrp.add("statictext", undefined, "px (prevents hairline gaps)");
 
         // Cap Z-Offset
         var offGrp = extPnl.add("group");
-        offGrp.add("statictext", undefined, "Cap Inset/Offset:").characters = 12;
+        offGrp.add("statictext", undefined, "Cap Inset/Offset:").characters = 14;
         var editCapOff = offGrp.add("edittext", undefined, "0.1");
         editCapOff.characters = 6;
         offGrp.add("statictext", undefined, "px (prevents Z-fighting)");
 
         // Shading Intensity
         var shdGrp = extPnl.add("group");
-        shdGrp.add("statictext", undefined, "Curved Shading:").characters = 12;
+        shdGrp.add("statictext", undefined, "Curved Shading:").characters = 14;
         var editShd = shdGrp.add("edittext", undefined, "15");
         editShd.characters = 6;
         var slShd = shdGrp.add("slider", undefined, 15, 0, 100);
@@ -1235,9 +1124,6 @@
         ]);
         targetList.selection = 0;
 
-        var dynSegCheck = tabBuild.add("checkbox", undefined, "Dynamic Segment Count (Animatable Timeline Slider 6-24)");
-        dynSegCheck.value = true;
-
         var shyCheck = tabBuild.add("checkbox", undefined, "Shy Secondary Layers (Keep timeline organized)");
         shyCheck.value = true;
 
@@ -1248,9 +1134,9 @@
                     editWidth.text = "450"; slWidth.value = 450;
                     editHeight.text = "920"; slHeight.value = 920;
                     linkCheck.value = true;
-                    editRadAll.text = "75"; slRadAll.value = 75;
+                    rTL.edit.text = "75"; rTL.slider.value = 75;
                     editDepth.text = "35"; slDepth.value = 35;
-                    editSeg.text = "16"; slSeg.value = 16;
+                    editSeg.text = "10"; slSeg.value = 10;
                     screenModeList.selection = 1;
                     scaleModeList.selection = 1;
                     colTop.text = "#101010"; colBot.text = "#252528"; colEdge.text = "#434346";
@@ -1259,40 +1145,40 @@
                     editWidth.text = "856"; slWidth.value = 856;
                     editHeight.text = "540"; slHeight.value = 540;
                     linkCheck.value = true;
-                    editRadAll.text = "32"; slRadAll.value = 32;
+                    rTL.edit.text = "32"; rTL.slider.value = 32;
                     editDepth.text = "8"; slDepth.value = 8;
-                    editSeg.text = "12"; slSeg.value = 12;
+                    editSeg.text = "8"; slSeg.value = 8;
                     colTop.text = "#D4AF37"; colBot.text = "#B8860B"; colEdge.text = "#C5A028";
                     break;
                 case 3: // 3D Tile
                     editWidth.text = "500"; slWidth.value = 500;
                     editHeight.text = "500"; slHeight.value = 500;
                     linkCheck.value = true;
-                    editRadAll.text = "60"; slRadAll.value = 60;
+                    rTL.edit.text = "60"; rTL.slider.value = 60;
                     editDepth.text = "80"; slDepth.value = 80;
-                    editSeg.text = "12"; slSeg.value = 12;
+                    editSeg.text = "10"; slSeg.value = 10;
                     colTop.text = "#00C853"; colBot.text = "#1B5E20"; colEdge.text = "#2E7D32";
                     break;
                 case 4: // UI Button Pill
                     editWidth.text = "360"; slWidth.value = 360;
                     editHeight.text = "100"; slHeight.value = 100;
                     linkCheck.value = true;
-                    editRadAll.text = "50"; slRadAll.value = 50;
+                    rTL.edit.text = "50"; rTL.slider.value = 50;
                     editDepth.text = "25"; slDepth.value = 25;
-                    editSeg.text = "16"; slSeg.value = 16;
+                    editSeg.text = "12"; slSeg.value = 12;
                     colTop.text = "#FF6D00"; colBot.text = "#D50000"; colEdge.text = "#E65100";
                     break;
                 case 5: // Sharp Corner Box
                     editWidth.text = "500"; slWidth.value = 500;
                     editHeight.text = "350"; slHeight.value = 350;
                     linkCheck.value = true;
-                    editRadAll.text = "0"; slRadAll.value = 0;
+                    rTL.edit.text = "0"; rTL.slider.value = 0;
                     editDepth.text = "120"; slDepth.value = 120;
                     editSeg.text = "6"; slSeg.value = 6;
                     colTop.text = "#673AB7"; colBot.text = "#311B92"; colEdge.text = "#512DA8";
                     break;
             }
-            linkCheck.onClick();
+            updateRadiiUI();
         };
 
         // ---------------- ACTION BUTTONS ----------------
@@ -1305,20 +1191,18 @@
         buildBtn.graphics.font = ScriptUI.newFont("sans-serif", "bold", 12);
 
         buildBtn.onClick = function () {
-            // Gather all parameters
             var screenModes = ["none", "top", "bottom", "both", "both_sep"];
             var params = {
                 width: parseFloat(editWidth.text) || 600,
                 height: parseFloat(editHeight.text) || 400,
                 linkRadii: linkCheck.value,
-                radiusAll: parseFloat(editRadAll.text) || 80,
-                radiusTL: parseFloat(rTL.edit.text) || 80,
-                radiusTR: parseFloat(rTR.edit.text) || 80,
-                radiusBR: parseFloat(rBR.edit.text) || 80,
-                radiusBL: parseFloat(rBL.edit.text) || 80,
+                radiusTL: parseFloat(rTL.edit.text) || 0,
+                radiusTR: parseFloat(rTR.edit.text) || 0,
+                radiusBR: parseFloat(rBR.edit.text) || 0,
+                radiusBL: parseFloat(rBL.edit.text) || 0,
                 isExtruded: extCheck.value,
                 depth: parseFloat(editDepth.text) || 60,
-                segments: Math.max(6, Math.min(24, Math.round(parseFloat(editSeg.text) || 12))),
+                segments: Math.max(6, Math.min(24, Math.round(parseFloat(editSeg.text) || 10))),
                 seamOverlap: parseFloat(editSeam.text) || 0.5,
                 capOffset: parseFloat(editCapOff.text) || 0.1,
                 shading: parseFloat(editShd.text) || 15,
@@ -1332,7 +1216,6 @@
                 screenOffsetX: parseFloat(editOffX.text) || 0,
                 screenOffsetY: parseFloat(editOffY.text) || 0,
                 targetMode: targetList.selection.index === 0 ? "precomp" : "active",
-                dynamicSegments: dynSegCheck.value,
                 shySecondary: shyCheck.value
             };
 

@@ -2,52 +2,56 @@
 
 **A native 3D/2.5D Extruded Rounded Rectangle Generator & Animator for Adobe After Effects.**
 
-Built as a high-performance alternative to Cinema 4D / Ray-Traced rendering, **Extruded Round Corners Maker** generates mathematically precise 3D rounded rectangles using native 2D segment strips (6 to 24 segments per 90° corner arc) and independent corner radii. 
+Built as a high-performance alternative to Cinema 4D / Ray-Traced rendering, **Extruded Round Corners Maker** generates mathematically precise 3D rounded rectangles using native 2D segment strips (strictly the needed segment count per 90° corner arc) and independent corner radii. 
 
 Everything is driven by live After Effects expressions parented to a single **Master Controller**, allowing full real-time animation directly on the timeline.
+
+Compatible with **Classic 3D** and **Advanced 3D** (AE 2024+).
 
 ---
 
 ## 🚀 Key Features
 
-### 1. Pure Classic 3D (No Cinema 4D Renderer Needed)
-- Bypasses all the bugs, slow viewport rendering, and lighting limitations of the C4D renderer.
-- Uses native Classic 3D vector shape layers and composition strips.
+### 1. Pure Classic & Advanced 3D Support
+- Works in **Classic 3D**, **Advanced 3D** (AE 2024+), and **Cinema 4D** renderers.
+- Screen composition masking is encapsulated inside a self-contained 2D pre-comp wrapper, preventing 3D track-matte breaking in the Advanced 3D engine.
 - Renders instantly in real-time, fully compatible with standard AE Cameras and Lights.
 
-### 2. Independent Corner Control
-- Set custom corner radii independently for **Top-Left**, **Top-Right**, **Bottom-Right**, and **Bottom-Left**, or toggle **Link Radii** to control all four at once.
+### 2. Independent Corner Control & "Link All 4 Corners"
+- **Link All 4 Corners (Checkbox)**: When active, all 4 corners automatically take their radius directly from **Radius Top-Left**. You only need to keyframe one slider to animate all corners together!
+- **Independent Mode**: When unchecked, dial in separate radii for **Top-Left**, **Top-Right**, **Bottom-Right**, and **Bottom-Left**.
 - Built-in proportional clamping ensures corners never self-intersect or invert even if radii exceed the rectangle dimensions.
 
-### 3. Customizable Arc Segments (6 to 24 Segments)
-- Define the smoothness of each corner arc from **6 segments** (stylized / low-poly) up to **24 segments** (ultra-smooth round arch).
-- **Dynamic Segment Count Toggle**: Animates the segment count directly on the timeline via a slider!
+### 3. Strictly Needed Segments (Zero Bloat, Zero Spiraling)
+- The rig generates **strictly the needed number of 2D strips** selected in the UI (e.g. 8, 10, or 12 segments per corner).
+- No excess hidden layers, no timeline clutter, and no over-rotation/spiraling.
 
 ### 4. Full Extrusion & Depth Control
 - **Extruded (Checkbox)**: Instantly switch between a flat 2D custom rounded rectangle and a full 3D extrusion.
-- **Extrusion Depth**: Control the depth along the Z-axis. Positive values extrude forward; negative values extrude backward.
+- **Extrusion Depth**: Control the depth along the Z-axis. Positive values extrude forward; negative values extrude backward. Keyframeable directly on the timeline!
 
 ### 5. Precision Seam & Anti-Clipping Math
-- **Anti-Gap Seam Overlap**: Classic 3D renderer antialiasing often creates a 1-pixel hairline gap between adjacent 3D polygons. The built-in sub-pixel seam overlap (+0.5px) completely eliminates edge gaps.
-- **Cap Z-Offset (Anti Z-Fighting)**: Offsets cap layers by a microscopic 0.1px from wall edges, eliminating GPU flickering and coplanar clipping.
+- **Anti-Gap Seam Overlap**: Sub-pixel seam overlap (+0.5px) completely eliminates 3D antialiasing edge gaps.
+- **Cap Z-Offset (Anti Z-Fighting)**: Offsets cap layers by 0.1px from wall edges, eliminating GPU flickering and coplanar clipping.
 
 ### 6. Timeline & Expression Animatable Colors
 - Dedicated controls on the Master Controller for:
   - **Cap Top Color**
   - **Cap Bottom Color**
   - **Edge Color**
+- Keyframe colors directly on the timeline to create smooth lighting transitions or dynamic palette shifts.
 - **Cylindrical Shading Intensity**: Simulates realistic ambient light curvature around the rounded corners even without 3D scene lights.
 
 ### 7. Cap as Screen (Composition Playback & Mapping)
 - Play and reproduce any composition, footage, or video on the **Top Cap**, **Bottom Cap**, or **Both Caps** (shared or separate comps).
-- **Automatic Track Matte**: Screen layers are automatically alpha-matted by the exact rounded rectangle shape of the cap—no spillover or messy masks.
+- **Universal 2D Mounted Wrapper**: Operates seamlessly in both Classic 3D and Advanced 3D.
 - **9 Alignment Presets**: Center, Top-Left, Top-Center, Top-Right, Center-Left, Center-Right, Bottom-Left, Bottom-Center, Bottom-Right.
 - **Scale Modes**:
   - `Auto Fit (Inside)`: Automatically fits the comp within cap bounds preserving aspect ratio.
   - `Auto Fill (Cover)`: Fills the entire cap area, cropping excess.
   - `Stretch`: Stretches to match exact Width & Height.
   - `Manual Scale (%)`: Direct slider control.
-- **X / Y Offset**: Fine-tune screen positioning in pixels.
+- **X / Y Offset**: Fine-tune screen positioning in pixels. Both Scale and Offset are keyframeable on the timeline!
 
 ---
 
@@ -77,34 +81,32 @@ When a rig is created, all parameters are exposed on the **Master Controller** N
 | Group | Parameter | Type | Default | Description |
 | :--- | :--- | :--- | :--- | :--- |
 | **Geometry** | `Extruded` | Checkbox | `ON` | Toggles 3D extrusion on/off. |
-| | `Width` | Slider | `600` | Total rectangle width in pixels. |
-| | `Height` | Slider | `400` | Total rectangle height in pixels. |
-| | `Link Radii` | Checkbox | `ON` | Links all 4 corners to `Radius All`. |
-| | `Radius All` | Slider | `80` | Corner radius when linked. |
-| | `Radius Top-Left` | Slider | `80` | Independent TL radius. |
-| | `Radius Top-Right` | Slider | `80` | Independent TR radius. |
-| | `Radius Bottom-Right`| Slider | `80` | Independent BR radius. |
-| | `Radius Bottom-Left` | Slider | `80` | Independent BL radius. |
-| **Extrusion** | `Extrusion Depth` | Slider | `60` | Depth along Z. Supports negative values. |
-| | `Corner Segments` | Slider | `12` | Segments per corner (6 - 24). |
+| | `Width` | Slider | `600` | Total rectangle width in pixels (animatable). |
+| | `Height` | Slider | `400` | Total rectangle height in pixels (animatable). |
+| | `Link All 4 Corners` | Checkbox | `ON` | When ON, all 4 corners use `Radius Top-Left`. |
+| | `Radius Top-Left` | Slider | `80` | Master radius when linked, independent TL when unlinked. |
+| | `Radius Top-Right` | Slider | `80` | Independent TR radius (when unlinked). |
+| | `Radius Bottom-Right`| Slider | `80` | Independent BR radius (when unlinked). |
+| | `Radius Bottom-Left` | Slider | `80` | Independent BL radius (when unlinked). |
+| **Extrusion** | `Extrusion Depth` | Slider | `60` | Depth along Z. Supports negative values (animatable). |
 | | `Seam Overlap (px)` | Slider | `0.5` | Sub-pixel overlap preventing gaps. |
 | | `Cap Z-Offset (px)` | Slider | `0.1` | Z-offset preventing Z-fighting. |
-| **Colors** | `Cap Top Color` | Color | `#1E88E5` | Color of the front/top cap. |
-| | `Cap Bottom Color` | Color | `#0D47A1` | Color of the back/bottom cap. |
-| | `Edge Color` | Color | `#1565C0` | Base color of the side walls. |
+| **Colors** | `Cap Top Color` | Color | `#1E88E5` | Color of the front/top cap (animatable). |
+| | `Cap Bottom Color` | Color | `#0D47A1` | Color of the back/bottom cap (animatable). |
+| | `Edge Color` | Color | `#1565C0` | Base color of the side walls (animatable). |
 | | `Shading Intensity` | Slider | `15` | Cylindrical lighting falloff on arcs. |
 | **Front Screen**| `Front Screen Enabled` | Checkbox | `OFF/ON` | Toggles front composition playback. |
 | | `Front Screen Alignment`| Slider | `0` (Center) | 0: Center, 1: TL, 2: TC, 3: TR, 4: CL, 5: CR, 6: BL, 7: BC, 8: BR. |
-| | `Front Screen Offset` | Point | `[0, 0]` | X and Y pixel offset. |
+| | `Front Screen Offset` | Point | `[0, 0]` | X and Y pixel offset (animatable). |
 | | `Front Screen Scale Mode`| Slider | `1` (Fit) | 0: Manual, 1: Fit, 2: Fill, 3: Stretch. |
-| | `Front Screen Scale` | Slider | `100%` | Manual scale percentage. |
-| | `Front Screen Opacity` | Slider | `100%` | Screen opacity. |
+| | `Front Screen Scale` | Slider | `100%` | Scale percentage (animatable). |
+| | `Front Screen Opacity` | Slider | `100%` | Screen opacity (animatable). |
 | **Back Screen** | `Back Screen Enabled` | Checkbox | `OFF/ON` | Toggles back composition playback. |
 | | `Back Screen Alignment` | Slider | `0` (Center) | Alignment preset for back screen. |
-| | `Back Screen Offset` | Point | `[0, 0]` | Back screen X and Y pixel offset. |
+| | `Back Screen Offset` | Point | `[0, 0]` | Back screen X and Y pixel offset (animatable). |
 | | `Back Screen Scale Mode`| Slider | `1` (Fit) | Back scale mode. |
-| | `Back Screen Scale` | Slider | `100%` | Back scale percentage. |
-| | `Back Screen Opacity` | Slider | `100%` | Back screen opacity. |
+| | `Back Screen Scale` | Slider | `100%` | Back scale percentage (animatable). |
+| | `Back Screen Opacity` | Slider | `100%` | Back screen opacity (animatable). |
 
 ---
 
